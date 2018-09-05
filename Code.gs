@@ -2,6 +2,40 @@
 // https://github.com/ahochsteger/gmail2gdrive
 
 /**
+ * Configuration for Gmail2GDrive
+ * See https://github.com/ahochsteger/gmail2gdrive/blob/master/README.md for a config reference
+ */
+function getGmail2GDriveConfig() {
+  return {
+    // Global filter
+    "globalFilter": "in:inbox",
+    // Gmail label for processed threads (will be created, if not existing):
+    "processedLabel": "Buchhaltungs-PDF-done",
+    // Sleep time in milli seconds between processed messages:
+    "sleepTime": 100,
+    // Maximum script runtime in seconds (google scripts will be killed after 5 minutes):
+    "maxRuntime": 280,
+    // Only process message newer than (leave empty for no restriction; use d, m and y for day, month and year):
+    "newerThan": "1m",
+    // Timezone for date/time operations:
+    "timezone": "GMT",
+    // Processing rules:
+    "rules": [
+      { // Store all pdf attachments from example2@example.com to the folder "Examples/example2"
+        "filter": "(subject:buchungsbestätigung OR subject:bestellbestätigung OR subject:subscription OR subject:rechnung OR subject:invoice OR subject:Receipt OR subject:billing) AND has:attachment",
+        "folder": "'Buchhaltung/'yyyy/MM",
+        "filenameFromRegexp": ".*\.pdf$",
+      },
+      { // Store all pdf attachments from example2@example.com to the folder "Examples/example2"
+        "filter": "(subject:buchungsbestätigung OR subject:bestellbestätigung OR subject:subscription OR subject:rechnung OR subject:invoice OR subject:receipt OR subject:billing) AND -has:attachment",
+        "saveThreadPDF": true,
+        "folder": "'Buchhaltung/'yyyy/MM",
+      }, 
+    ]
+  };
+}
+
+/**
  * Returns the label with the given name or creates it if not existing.
  */
 function getOrCreateLabel(labelName) {
@@ -130,12 +164,19 @@ function processThreadToHtml(thread) {
   return html;
 }
 
+function getMessageDateForPdf(thread) {
+  var messages = thread.getMessages();
+  return messages[0].getDate();
+}
+
+
 /**
 * Generate a PDF document for the whole thread using HTML from .
  */
-function processThreadToPdf(thread, rule, html) {
+function processThreadToPdf(thread, rule, config) {
   Logger.log("INFO: Saving PDF copy of thread '" + thread.getFirstMessageSubject() + "'");
-  var folder = getOrCreateFolder(rule.folder);
+  var messageDate = getMessageDateForPdf(thread);
+  var folder = getOrCreateFolder(Utilities.formatDate(messageDate, config.timezone, rule.folder));
   var html = processThreadToHtml(thread);
   var blob = Utilities.newBlob(html, 'text/html');
   var pdf = folder.createFile(blob.getAs('application/pdf')).setName(thread.getFirstMessageSubject() + ".pdf");
@@ -188,7 +229,7 @@ function Gmail2GDrive() {
         processMessage(message, rule, config);
       }
       if (doPDF) { // Generate a PDF document of a thread:
-        processThreadToPdf(thread, rule);
+        processThreadToPdf(thread, rule, config);
       }
 
       // Mark a thread as processed:
